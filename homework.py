@@ -46,7 +46,7 @@ def get_api_answer(current_timestamp: int) -> Union[dict, str]:
     logging.info(f'Отправка запроса на {ENDPOINT} с параметрами {params}')
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    except requests.exceptions.RequestException as exc:
+    except requests.exception as exc:
         logging.error(f"Проблема с подключением к эндпоинту {ENDPOINT}")
         raise exc
     if response.status_code != HTTPStatus.OK:
