@@ -5,12 +5,11 @@ import time
 
 import requests
 import telegram
-
 from dotenv import load_dotenv
 from http import HTTPStatus
 from typing import Union
 
-from exceptions import HTTPRequestError
+from exceptions import HTTPRequestError, EmptyResponseFromAPI
 
 load_dotenv()
 
@@ -31,69 +30,62 @@ HOMEWORK_VERDICTS = {
 
 
 def send_message(bot: telegram.Bot, message: str) -> None:
-    """отправляет сообщение в Telegram чат."""
+    """Отправляет сообщение в Telegram чат."""
+    logging.info(f'Попытка отправки сообщения {message}')
     try:
-        logging.info(f'Бот отправил сообщение {message}')
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug('Сообщение успешно отправлено')
+        return True
     except Exception as error:
         logging.error(error)
+        return False
 
 
 def get_api_answer(current_timestamp: int) -> Union[dict, str]:
-    """создает и отправляет запрос к эндпоинту."""
-    params = {'from_date': current_timestamp}
-    logging.info(f'Отправка запроса на {ENDPOINT} с параметрами {params}')
+    """Создает и отправляет запрос к эндпоинту."""
+    parameters = dict(
+        url=ENDPOINT,
+        headers=HEADERS,
+        params={'from_date': current_timestamp})
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    except requests.exception as exc:
-        logging.error(f"Проблема с подключением к эндпоинту {ENDPOINT}")
-        raise exc
+        response = requests.get(**parameters)
+    except requests.exceptions.RequestException as exc:
+        raise ConnectionError(f'Ошибка подключения: {exc}')
     if response.status_code != HTTPStatus.OK:
-        logging.error(
-            f"Эндпоинт {ENDPOINT} недоступен."
-            f"Код ответа API: {response.status_code}"
-        )
-        raise HTTPRequestError("Код ответа от API не 200.")
+        raise HTTPRequestError('Код ответа от API не 200.')
     return response.json()
 
 
 def check_response(response: dict):
     """Проверяет ответ API на корректность и соответствует ожиданиям."""
     if not isinstance(response, dict):
-        raise TypeError("Ответ не словарь")
-    logging.info("Получаем homeworks")
+        raise TypeError('Ответ не словарь')
+    logging.info('Получаем homeworks')
 
-    homeworks = response.get("homeworks")
+    homeworks = response.get('homeworks')
 
     if homeworks is None:
-        raise KeyError("Не нашли homeworks в ответе")
+        raise EmptyResponseFromAPI('Список homeworks пуст')
     if not isinstance(homeworks, list):
-        raise TypeError("homeworks не список")
-    if not homeworks:
-        logging.info("Не найдены homeworks")
-
+        raise TypeError('homeworks не список')
     return homeworks
 
 
 def parse_status(homework: dict) -> str:
     """Извлекает из информации и статус конкретной домашней работы."""
-    homework_name = homework.get("homework_name")
-    homework_status = homework.get("status")
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
 
-    if homework_name is None:
-        raise KeyError("Не нашли homework_name в homework")
-    if homework_status is None:
-        raise KeyError("Не нашли status в homework")
-
-    verdict = HOMEWORK_VERDICTS.get(homework_status)
-    if verdict is None:
+    if not homework_name:
+        raise KeyError('Не нашли homework_name в homework')
+    if homework_status not in HOMEWORK_VERDICTS:
         raise KeyError(
-            f"Недокументированный статус {homework_name}"
-            " домашней работы в ответе API"
+            f'Недокументированный статус {homework_name}'
+            ' домашней работы в ответе API'
         )
 
-    logging.info(f"Получили новый статус {homework_name} - {verdict}")
+    verdict = HOMEWORK_VERDICTS[homework_status]
+    logging.info(f'Получили новый статус {homework_name} - {verdict}')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -146,7 +138,9 @@ def main():
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s [%(levelname)s] %(message)s',
+        filename='program.log',
+        format=('%(asctime)s [%(levelname)s]'
+                '%(funcName)s:%(lineno)d %(message)s'),
         stream=sys.stdout
 
     )
