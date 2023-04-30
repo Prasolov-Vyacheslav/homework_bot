@@ -1,13 +1,12 @@
 import logging
 import os
-import sys
 import time
+from http import HTTPStatus
+from typing import Union
 
 import requests
 import telegram
 from dotenv import load_dotenv
-from http import HTTPStatus
-from typing import Union
 
 from exceptions import HTTPRequestError, EmptyResponseFromAPI
 
@@ -36,7 +35,7 @@ def send_message(bot: telegram.Bot, message: str) -> None:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug('Сообщение успешно отправлено')
         return True
-    except Exception as error:
+    except telegram.error.TelegramError as error:
         logging.error(error)
         return False
 
@@ -64,7 +63,7 @@ def check_response(response: dict):
 
     homeworks = response.get('homeworks')
 
-    if homeworks is None:
+    if not homeworks:
         raise EmptyResponseFromAPI('Список homeworks пуст')
     if not isinstance(homeworks, list):
         raise TypeError('homeworks не список')
@@ -101,6 +100,9 @@ def check_tokens() -> bool:
 
 def main():
     """Основная логика работы бота."""
+
+    prev_report = {}
+    current_report = {}
     last_send = {
         'error': None,
     }
@@ -109,23 +111,31 @@ def main():
             'Отсутствует обязательная переменная окружения.\n'
             'Программа принудительно остановлена.'
         )
-        sys.exit('Отсутствует обязательная переменная окружения.')
+        raise KeyError('Отсутствует обязательная переменная окружения.')
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             for homework in homeworks:
-                message = parse_status(homework)
-                if last_send.get(homework['homework_name']) != message:
-                    send_message(bot, message)
-                    last_send[homework['homework_name']] = message
+                if homeworks:
+                    current_report = {
+                        'homework_name': [homework['homework_name']],
+                        'status': parse_status(homework)}
+                    if current_report != prev_report:
+                        message = parse_status(homework)
+                        if send_message(bot, message):
+                            send_message(bot, message)
+                            continue
+                        else:
+                            break
             current_timestamp = response.get('current_date')
+            prev_report = current_report.copy()
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
+            logging.error(error)
             if last_send['error'] != message:
                 send_message(bot, message)
                 last_send['error'] = message
@@ -138,10 +148,10 @@ def main():
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
-        filename='program.log',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(__file__ + '.log', encoding='UTF-8')],
         format=('%(asctime)s [%(levelname)s]'
                 '%(funcName)s:%(lineno)d %(message)s'),
-        stream=sys.stdout
-
     )
     main()
