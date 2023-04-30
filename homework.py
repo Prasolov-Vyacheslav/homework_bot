@@ -100,7 +100,6 @@ def check_tokens() -> bool:
 
 def main():
     """Основная логика работы бота."""
-
     prev_report = {}
     current_report = {}
     last_send = {
