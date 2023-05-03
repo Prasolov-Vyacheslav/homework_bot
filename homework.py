@@ -146,7 +146,7 @@ def main():
             logging.error(error)
         except Exception as error:
             current_report['status'] = f'Сбой в работе программы: {error}'
-            logging.error(logging.error(current_report['status']))
+            logging.error(current_report['status'])
             if current_report != prev_report:
                 send_message(bot, current_report['status'])
                 prev_report = current_report.copy()
