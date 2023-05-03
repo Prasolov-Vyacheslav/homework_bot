@@ -47,19 +47,14 @@ def get_api_answer(current_timestamp: int) -> Union[dict, str]:
         headers=HEADERS,
         params={'from_date': current_timestamp})
     logging.info(
-        f'Отправка запроса на {ENDPOINT} '
-        f'с параметрами {parameters["params"]} '
-        f'и загаловками {HEADERS}'
-    )
+        'Отправка запроса на {url} с параметрами {params}'
+        'и загаловками {headers}'.format(**parameters))
     try:
         response = requests.get(**parameters)
     except requests.exceptions.RequestException:
         raise ConnectionError(
-            f'Ошибка подключения: '
-            f'Невозможно подключиться к {ENDPOINT} '
-            f'параметры: {parameters["params"]}, '
-            f'заголовки: {HEADERS}'
-        )
+            'Ошибка подключения: Невозможно подключиться к {url},'
+            'параметры: {params}, заголовки: {headers}'.format(**parameters))
     if response.status_code != HTTPStatus.OK:
         error_message = (
             f'Ошибка HTTP {response.status_code}: {response.reason}\n'
@@ -134,8 +129,7 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 current_report['homework_name'] = homeworks[0]['homework_name']
-                current_report['status'] = homeworks[0]['status']
-                message = parse_status(current_report)
+                message = parse_status(homeworks[0])
                 current_report['status'] = message
             else:
                 message = 'Нет новых статусов'
@@ -143,15 +137,16 @@ def main():
             if current_report != prev_report:
                 if send_message(bot, message):
                     prev_report = current_report.copy()
-                    current_timestamp = response.get('current_date', 0)
+                    current_timestamp = response.get(
+                        'current_date', current_timestamp
+                    )
             else:
                 logging.info('Статусы не изменились')
         except EmptyResponseFromAPI as error:
             logging.error(error)
         except Exception as error:
             current_report['status'] = f'Сбой в работе программы: {error}'
-            logging.error(f'Произошла ошибка: {current_report.get("status")},'
-                          f'{error}')
+            logging.error(logging.error(current_report['status']))
             if current_report != prev_report:
                 send_message(bot, current_report['status'])
                 prev_report = current_report.copy()
